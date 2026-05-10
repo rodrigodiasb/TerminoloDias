@@ -22,10 +22,11 @@
           <button id="btnStart" class="btn primary">Começar desafio</button>
           <button id="btnShowRankStart" class="btn ghost">Ver ranking</button>
           <p id="statusMessage" class="status-message">Carregando banco de perguntas...</p>
+          <p id="dbStatus" class="db-status">Banco online: verificando conexão...</p>
         </div>
       </div>
       <div class="mini-rules">
-        <div><strong>10</strong><span>questões</span></div>
+        <div><strong>∞</strong><span>até o 1º erro</span></div>
         <div><strong>Ranking</strong><span>pontuação final</span></div>
         <div><strong>Recurso</strong><span>revisão da questão</span></div>
       </div>
@@ -64,7 +65,9 @@
         <h2 id="feedbackTitle">Resposta correta!</h2>
         <p id="feedbackExplanation"></p>
         <button id="btnReport" class="btn ghost">Reportar / entrar com recurso</button>
-        <button id="btnNext" class="btn primary">Próxima pergunta</button>
+        <button id="btnNext" class="btn primary">Continuar desafio</button>
+        <button id="btnRetryAfterError" class="btn primary danger hidden">Tentar novamente do zero</button>
+        <button id="btnFinishSave" class="btn ghost strong hidden">Finalizar e gravar ranking</button>
       </div>
     </section>
 
@@ -73,6 +76,7 @@
         <div class="trophy">🏆</div>
         <h2>Desafio concluído</h2>
         <p id="resultSummary">Resultado final</p>
+        <p id="saveStatus" class="save-status"></p>
         <div class="result-grid">
           <div><strong id="resultScore">0</strong><span>Pontos</span></div>
           <div><strong id="resultCorrect">0</strong><span>Acertos</span></div>

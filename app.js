@@ -1,20 +1,20 @@
 let db = null;
 let firebaseReady = false;
+let firebaseAuthReady = false;
 let fire = null;
 
 const firebaseConfig = window.QUIZ_FIREBASE_CONFIG || {};
 const firebaseEnabled = Boolean(window.QUIZ_FIREBASE_ENABLED);
 
 const CONFIG = {
-  totalQuestions: 10,
   levelPlan: { facil: 5, medio: 3, dificil: 2 },
   learningPattern: ['facil','facil','facil','facil','facil','medio','medio','medio','dificil','dificil'],
   points: { facil: 10, medio: 20, dificil: 35 },
   bonusPerStreak: 3,
   localKeys: {
-    used: 'quiz_used_question_ids_v2',
-    scores: 'quiz_local_scores_v2',
-    reports: 'quiz_local_reports_v2'
+    used: 'quiz_used_question_ids_v3',
+    scores: 'quiz_local_scores_v3',
+    reports: 'quiz_local_reports_v3'
   }
 };
 
@@ -23,28 +23,50 @@ const screens = ['screenStart','screenGame','screenFeedback','screenResult','scr
 
 const state = {
   allQuestions: [],
-  selectedQuestions: [],
-  currentIndex: 0,
+  currentQuestion: null,
+  sessionQuestionIds: [],
+  patternIndex: 0,
   score: 0,
   correct: 0,
+  answered: 0,
+  mistakes: 0,
   streak: 0,
   playerName: '',
   playerGroup: '',
   startedAt: null,
+  endedAt: null,
   questionsLoaded: false,
-  lastAnswerCorrect: false
+  lastAnswerCorrect: false,
+  gameLockedByError: false,
+  lastSaveMode: ''
 };
 
 function setStatus(message, type = ''){
   const el = $('statusMessage');
   if (!el) return;
   el.textContent = message || '';
-  el.classList.remove('ok','warn');
+  el.classList.remove('ok','warn','error');
+  if(type) el.classList.add(type);
+}
+
+function setDbStatus(message, type = ''){
+  const el = $('dbStatus');
+  if (!el) return;
+  el.textContent = message || '';
+  el.classList.remove('ok','warn','error');
+  if(type) el.classList.add(type);
+}
+
+function setSaveStatus(message, type = ''){
+  const el = $('saveStatus');
+  if (!el) return;
+  el.textContent = message || '';
+  el.classList.remove('ok','warn','error');
   if(type) el.classList.add(type);
 }
 
 function showScreen(id){
-  screens.forEach(s => $(s).classList.toggle('active', s === id));
+  screens.forEach(s => $(s)?.classList.toggle('active', s === id));
 }
 
 function shuffle(array){
@@ -72,46 +94,60 @@ function saveUsedIds(ids){
   localStorage.setItem(CONFIG.localKeys.used, JSON.stringify([...new Set(ids.map(String))]));
 }
 
-function pickOneByLevel(level, alreadyPicked, usedIds){
-  const candidates = state.allQuestions.filter(q => normalizeLevel(q.nivel) === level);
-  const already = new Set(alreadyPicked.map(q => String(q.id)));
-  const used = new Set(usedIds.map(String));
-
-  let pool = shuffle(candidates.filter(q => !used.has(String(q.id)) && !already.has(String(q.id))));
-
-  if (!pool.length) {
-    pool = shuffle(candidates.filter(q => !already.has(String(q.id))));
-  }
-
-  if (!pool.length) {
-    pool = shuffle(state.allQuestions.filter(q => !already.has(String(q.id))));
-  }
-
-  return pool[0] || null;
+function markQuestionAsUsed(questionId){
+  if(questionId === undefined || questionId === null) return;
+  const used = getUsedIds();
+  used.push(String(questionId));
+  const allIds = new Set(state.allQuestions.map(q => String(q.id)));
+  const unique = [...new Set(used.map(String))];
+  const stillHasFreshQuestions = [...allIds].some(id => !unique.includes(id));
+  saveUsedIds(stillHasFreshQuestions ? unique : []);
 }
 
-function buildQuestionSet(){
-  const usedIds = getUsedIds();
-  const selected = [];
+function getCandidatePool(level){
+  const used = new Set(getUsedIds().map(String));
+  const session = new Set(state.sessionQuestionIds.map(String));
+  const byLevel = state.allQuestions.filter(q => normalizeLevel(q.nivel) === level);
 
-  CONFIG.learningPattern.forEach(level => {
-    const item = pickOneByLevel(level, selected, usedIds);
-    if(item) selected.push(item);
-  });
+  let pool = byLevel.filter(q => !used.has(String(q.id)) && !session.has(String(q.id)));
+  if(pool.length) return shuffle(pool);
 
-  if (selected.length < CONFIG.totalQuestions) {
-    const already = new Set(selected.map(q => String(q.id)));
-    const complement = shuffle(state.allQuestions.filter(q => !already.has(String(q.id))))
-      .slice(0, CONFIG.totalQuestions - selected.length);
-    selected.push(...complement);
+  pool = byLevel.filter(q => !session.has(String(q.id)));
+  if(pool.length) return shuffle(pool);
+
+  pool = state.allQuestions.filter(q => !used.has(String(q.id)) && !session.has(String(q.id)));
+  if(pool.length) return shuffle(pool);
+
+  pool = state.allQuestions.filter(q => !session.has(String(q.id)));
+  if(pool.length) return shuffle(pool);
+
+  saveUsedIds([]);
+  state.sessionQuestionIds = [];
+  return shuffle(state.allQuestions);
+}
+
+function pickNextQuestion(){
+  if(!state.allQuestions.length) return null;
+
+  for(let attempt = 0; attempt < CONFIG.learningPattern.length; attempt++){
+    const level = CONFIG.learningPattern[(state.patternIndex + attempt) % CONFIG.learningPattern.length];
+    const pool = getCandidatePool(level);
+    if(pool.length){
+      state.patternIndex = (state.patternIndex + attempt + 1) % CONFIG.learningPattern.length;
+      const selected = pool[0];
+      state.sessionQuestionIds.push(String(selected.id));
+      markQuestionAsUsed(selected.id);
+      return selected;
+    }
   }
 
-  const newUsed = [...usedIds, ...selected.map(q => String(q.id))];
-  const allIds = new Set(state.allQuestions.map(q => String(q.id)));
-  const stillHasFreshQuestions = [...allIds].some(id => !newUsed.includes(id));
-  saveUsedIds(stillHasFreshQuestions ? newUsed : []);
-
-  return selected.slice(0, CONFIG.totalQuestions);
+  const fallback = shuffle(state.allQuestions)[0] || null;
+  if(fallback){
+    state.patternIndex = (state.patternIndex + 1) % CONFIG.learningPattern.length;
+    state.sessionQuestionIds.push(String(fallback.id));
+    markQuestionAsUsed(fallback.id);
+  }
+  return fallback;
 }
 
 async function loadQuestions(){
@@ -136,28 +172,40 @@ async function loadQuestions(){
 async function initFirebase(){
   if(!firebaseEnabled){
     console.info('Firebase desativado. Usando modo local.');
+    setDbStatus('Banco online: desativado neste arquivo. Ranking ficará apenas neste dispositivo.', 'warn');
     return;
   }
 
   if(!firebaseConfig || !firebaseConfig.projectId || String(firebaseConfig.projectId).includes('COLE_AQUI')){
     console.warn('Firebase ativado, mas firebaseConfig está incompleto. Usando modo local.');
+    setDbStatus('Banco online: configuração incompleta. Confira o firebase-config.js.', 'error');
     return;
   }
 
   try {
+    setDbStatus('Banco online: conectando...', 'warn');
     const appModule = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js');
-    const authModule = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js');
     const fireModule = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js');
     const app = appModule.initializeApp(firebaseConfig);
-    const auth = authModule.getAuth(app);
-    await authModule.signInAnonymously(auth);
     db = fireModule.getFirestore(app);
     fire = fireModule;
     firebaseReady = true;
-    console.info('Firebase conectado.');
+
+    try {
+      const authModule = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js');
+      const auth = authModule.getAuth(app);
+      await authModule.signInAnonymously(auth);
+      firebaseAuthReady = true;
+      setDbStatus('Banco online: conectado com login anônimo.', 'ok');
+    } catch (authError) {
+      firebaseAuthReady = false;
+      console.warn('Login anônimo não ativado. O jogo tentará usar regras públicas validadas.', authError);
+      setDbStatus('Banco online: conectado. Login anônimo não ativado; use as regras públicas validadas.', 'warn');
+    }
   } catch (error) {
     console.warn('Firebase não conectou. O jogo continuará em modo local.', error);
     firebaseReady = false;
+    setDbStatus('Banco online: não conectado. Abra o console do navegador para ver o erro.', 'error');
   }
 }
 
@@ -177,36 +225,41 @@ async function startGame(){
 
   state.playerName = name;
   state.playerGroup = group || 'Sem grupo';
-  state.currentIndex = 0;
+  state.currentQuestion = null;
+  state.sessionQuestionIds = [];
+  state.patternIndex = 0;
   state.score = 0;
   state.correct = 0;
+  state.answered = 0;
+  state.mistakes = 0;
   state.streak = 0;
   state.startedAt = new Date();
-  state.selectedQuestions = buildQuestionSet();
-
-  if(!state.selectedQuestions.length){
-    alert('Não há perguntas suficientes para iniciar o desafio.');
-    return;
-  }
+  state.endedAt = null;
+  state.lastAnswerCorrect = false;
+  state.gameLockedByError = false;
+  state.lastSaveMode = '';
 
   $('hudPlayer').textContent = state.playerName;
   showScreen('screenGame');
-  renderQuestion();
+  renderNextQuestion();
 }
 
-function renderQuestion(){
-  const q = state.selectedQuestions[state.currentIndex];
+function renderNextQuestion(){
+  if(state.gameLockedByError) return;
+  const q = pickNextQuestion();
   if(!q){
-    finishGame();
+    alert('Não há perguntas suficientes para iniciar o desafio.');
+    showScreen('screenStart');
     return;
   }
 
+  state.currentQuestion = q;
   $('hudScore').textContent = state.score;
-  $('hudQuestionCount').textContent = `Questão ${state.currentIndex + 1}/${state.selectedQuestions.length}`;
-  $('hudLevel').textContent = 'Desafio';
+  $('hudQuestionCount').textContent = `Questão ${state.answered + 1}`;
+  $('hudLevel').textContent = `Sequência: ${state.correct} acerto${state.correct === 1 ? '' : 's'}`;
   $('hudCategory').textContent = String(q.categoria || 'Geral').replaceAll('_',' ');
   $('questionText').textContent = q.pergunta;
-  $('progressFill').style.width = `${((state.currentIndex) / state.selectedQuestions.length) * 100}%`;
+  $('progressFill').style.width = `${Math.max(8, (((state.answered % CONFIG.learningPattern.length) + 1) / CONFIG.learningPattern.length) * 100)}%`;
 
   const answers = $('answers');
   answers.innerHTML = '';
@@ -220,9 +273,13 @@ function renderQuestion(){
 }
 
 function answerQuestion(answer){
-  const q = state.selectedQuestions[state.currentIndex];
+  if(state.gameLockedByError) return;
+  const q = state.currentQuestion;
+  if(!q) return;
+
   const isCorrect = answer === q.correta;
   state.lastAnswerCorrect = isCorrect;
+  state.answered += 1;
 
   if(isCorrect){
     state.correct += 1;
@@ -231,61 +288,91 @@ function answerQuestion(answer){
     const bonus = state.streak > 1 ? (state.streak - 1) * CONFIG.bonusPerStreak : 0;
     state.score += base + bonus;
   } else {
+    state.mistakes += 1;
     state.streak = 0;
+    state.gameLockedByError = true;
   }
 
+  $('hudScore').textContent = state.score;
   $('feedbackCard').classList.toggle('wrong', !isCorrect);
   $('feedbackIcon').textContent = isCorrect ? '✓' : '×';
-  $('feedbackTitle').textContent = isCorrect ? 'Resposta certa!' : 'Resposta errada';
-  $('feedbackExplanation').innerHTML = `${escapeHtml(q.explicacao || '')}<br><br><strong>Resposta correta:</strong> ${escapeHtml(q.correta)}`;
+  $('feedbackTitle').textContent = isCorrect ? 'Resposta certa!' : 'Primeiro erro!';
+
+  if(isCorrect){
+    $('feedbackExplanation').innerHTML = `${escapeHtml(q.explicacao || '')}<br><br><strong>Continue:</strong> o desafio segue enquanto você acertar.`;
+    $('btnNext').classList.remove('hidden');
+    $('btnRetryAfterError').classList.add('hidden');
+    $('btnFinishSave').classList.add('hidden');
+  } else {
+    $('feedbackExplanation').innerHTML = `${escapeHtml(q.explicacao || '')}<br><br><strong>Resposta correta:</strong> ${escapeHtml(q.correta)}<br><br>Você pode tentar novamente do zero ou finalizar agora para gravar sua pontuação no ranking.`;
+    $('btnNext').classList.add('hidden');
+    $('btnRetryAfterError').classList.remove('hidden');
+    $('btnFinishSave').classList.remove('hidden');
+  }
+
   showScreen('screenFeedback');
 }
 
-async function nextQuestion(){
-  state.currentIndex += 1;
-  if(state.currentIndex >= state.selectedQuestions.length){
-    await finishGame();
-  } else {
-    showScreen('screenGame');
-    renderQuestion();
-  }
+function nextQuestion(){
+  showScreen('screenGame');
+  renderNextQuestion();
 }
 
-async function finishGame(){
+async function finishAndSave(){
+  state.endedAt = new Date();
   $('progressFill').style.width = '100%';
-  const total = state.selectedQuestions.length || CONFIG.totalQuestions;
-  const percent = total ? Math.round((state.correct / total) * 100) : 0;
+  const totalAnswered = state.answered || 0;
+  const percent = totalAnswered ? Math.round((state.correct / totalAnswered) * 100) : 0;
 
-  $('resultSummary').textContent = `${state.playerName}, você concluiu o desafio com ${state.correct} acertos em ${total} questões.`;
+  $('resultSummary').textContent = `${state.playerName}, você acertou ${state.correct} pergunta${state.correct === 1 ? '' : 's'} antes do primeiro erro.`;
   $('resultScore').textContent = state.score;
-  $('resultCorrect').textContent = `${state.correct}/${total}`;
+  $('resultCorrect').textContent = `${state.correct}/${totalAnswered}`;
   $('resultPercent').textContent = `${percent}%`;
-
-  await saveScore({
-    playerName: state.playerName,
-    playerGroup: state.playerGroup,
-    score: state.score,
-    correct: state.correct,
-    total,
-    percent,
-    createdAt: new Date().toISOString(),
-    questions: state.selectedQuestions.map(q => q.id)
-  });
+  setSaveStatus('Gravando resultado...', 'warn');
 
   showScreen('screenResult');
+
+  const saveResult = await saveScore({
+    playerName: state.playerName,
+    playerGroup: state.playerGroup,
+    score: Number(state.score || 0),
+    correct: Number(state.correct || 0),
+    total: Number(totalAnswered || 0),
+    percent: Number(percent || 0),
+    mistakes: Number(state.mistakes || 0),
+    endedBy: 'primeiro_erro',
+    startedAt: state.startedAt ? state.startedAt.toISOString() : new Date().toISOString(),
+    endedAt: state.endedAt ? state.endedAt.toISOString() : new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    questions: state.sessionQuestionIds
+  });
+
+  if(saveResult.mode === 'online'){
+    setSaveStatus('Resultado gravado no banco online. O ranking será compartilhado entre dispositivos.', 'ok');
+  } else {
+    setSaveStatus(`Resultado salvo apenas neste dispositivo. Motivo: ${saveResult.message || 'Firebase não conectado.'}`, 'warn');
+  }
 }
 
 async function saveScore(payload){
-  if(firebaseReady){
+  if(firebaseReady && db && fire){
     try {
       const { addDoc, collection, serverTimestamp } = fire;
       await addDoc(collection(db, 'resultados'), {...payload, createdAtServer: serverTimestamp()});
-      return;
+      return { mode: 'online' };
     } catch (err) {
       console.warn('Falha ao salvar no Firestore. Salvando localmente.', err);
+      const msg = String(err?.message || err?.code || 'erro desconhecido');
+      saveLocalScore(payload);
+      return { mode: 'local', message: msg };
     }
   }
 
+  saveLocalScore(payload);
+  return { mode: 'local', message: firebaseEnabled ? 'Firebase ativado, porém sem conexão com o Firestore.' : 'Firebase desativado no firebase-config.js.' };
+}
+
+function saveLocalScore(payload){
   const scores = JSON.parse(localStorage.getItem(CONFIG.localKeys.scores) || '[]');
   scores.push(payload);
   localStorage.setItem(CONFIG.localKeys.scores, JSON.stringify(scores));
@@ -293,34 +380,48 @@ async function saveScore(payload){
 
 async function loadRanking(){
   let scores = [];
+  let source = 'local';
 
-  if(firebaseReady){
+  if(firebaseReady && db && fire){
     try {
       const { collection, getDocs, limit, orderBy, query } = fire;
-      const q = query(collection(db, 'resultados'), orderBy('score', 'desc'), limit(20));
+      const q = query(collection(db, 'resultados'), orderBy('score', 'desc'), limit(30));
       const snap = await getDocs(q);
       scores = snap.docs.map(doc => doc.data());
+      source = 'online';
     } catch (err) {
       console.warn('Falha ao carregar ranking do Firestore. Usando ranking local.', err);
+      source = `local (${String(err?.message || err?.code || 'falha no Firestore')})`;
     }
   }
 
   if(!scores.length){
-    scores = JSON.parse(localStorage.getItem(CONFIG.localKeys.scores) || '[]')
-      .sort((a,b) => (b.score || 0) - (a.score || 0))
-      .slice(0,20);
+    scores = JSON.parse(localStorage.getItem(CONFIG.localKeys.scores) || '[]');
+    if(source === 'online') source = 'online sem registros';
   }
 
-  renderRanking(scores);
+  scores = scores
+    .sort((a,b) => (Number(b.score || 0) - Number(a.score || 0)) || (Number(b.correct || 0) - Number(a.correct || 0)))
+    .slice(0,30);
+
+  renderRanking(scores, source);
   showScreen('screenRank');
 }
 
-function renderRanking(scores){
+function renderRanking(scores, source = ''){
   const list = $('rankList');
   list.innerHTML = '';
 
+  const sourceInfo = document.createElement('p');
+  sourceInfo.className = 'rank-meta';
+  sourceInfo.textContent = source === 'online' ? 'Fonte: banco online Firebase Firestore.' : `Fonte: ${source || 'ranking local deste dispositivo'}.`;
+  list.appendChild(sourceInfo);
+
   if(!scores.length){
-    list.innerHTML = '<p class="rank-meta">Ainda não há pontuações registradas.</p>';
+    const empty = document.createElement('p');
+    empty.className = 'rank-meta';
+    empty.textContent = 'Ainda não há pontuações registradas.';
+    list.appendChild(empty);
     return;
   }
 
@@ -331,7 +432,7 @@ function renderRanking(scores){
       <div class="rank-pos">#${index + 1}</div>
       <div>
         <div class="rank-name">${escapeHtml(item.playerName || 'Jogador')}</div>
-        <div class="rank-meta">${escapeHtml(item.playerGroup || 'Sem grupo')} • ${item.correct || 0}/${item.total || 10} acertos</div>
+        <div class="rank-meta">${escapeHtml(item.playerGroup || 'Sem grupo')} • ${item.correct || 0} acerto${Number(item.correct || 0) === 1 ? '' : 's'} até o 1º erro</div>
       </div>
       <div class="rank-score">${item.score || 0}</div>`;
     list.appendChild(row);
@@ -348,25 +449,25 @@ async function sendReport(event){
   const text = $('reportText').value.trim();
   if(!text){ alert('Descreva o motivo do recurso antes de enviar.'); return; }
 
-  const q = state.selectedQuestions[state.currentIndex];
+  const q = state.currentQuestion;
   if(!q){ return; }
 
   const payload = {
-    questionId: q.id,
+    questionId: Number(q.id),
     questionText: q.pergunta,
     correctAnswer: q.correta,
-    playerName: state.playerName,
-    playerGroup: state.playerGroup,
+    playerName: state.playerName || 'Não informado',
+    playerGroup: state.playerGroup || 'Sem grupo',
     reportText: text,
     createdAt: new Date().toISOString()
   };
 
-  if(firebaseReady){
+  if(firebaseReady && db && fire){
     try {
       const { addDoc, collection, serverTimestamp } = fire;
       await addDoc(collection(db, 'recursos_questoes'), {...payload, createdAtServer: serverTimestamp()});
       $('reportDialog').close();
-      alert('Recurso registrado. Obrigado por ajudar a melhorar o quiz!');
+      alert('Recurso registrado no banco online. Obrigado por ajudar a melhorar o quiz!');
       return;
     } catch (err) {
       console.warn('Falha ao salvar recurso no Firestore. Salvando localmente.', err);
@@ -377,7 +478,7 @@ async function sendReport(event){
   reports.push(payload);
   localStorage.setItem(CONFIG.localKeys.reports, JSON.stringify(reports));
   $('reportDialog').close();
-  alert('Recurso registrado localmente. Quando o Firebase estiver configurado, os próximos recursos irão para o banco online.');
+  alert('Recurso registrado localmente. O Firebase ainda não está gravando online neste dispositivo.');
 }
 
 function escapeHtml(str){
@@ -387,7 +488,9 @@ function escapeHtml(str){
 function bindEvents(){
   $('btnStart').addEventListener('click', startGame);
   $('btnNext').addEventListener('click', nextQuestion);
-  $('btnRestart').addEventListener('click', () => showScreen('screenStart'));
+  $('btnRetryAfterError').addEventListener('click', startGame);
+  $('btnFinishSave').addEventListener('click', finishAndSave);
+  $('btnRestart').addEventListener('click', startGame);
   $('btnShowRank').addEventListener('click', loadRanking);
   $('btnShowRankStart').addEventListener('click', loadRanking);
   $('btnBackHome').addEventListener('click', () => showScreen('screenStart'));

@@ -1,57 +1,76 @@
-# Quiz Terminologias Médicas
+# Quiz Terminologias Médicas — GitHub Pages + Firebase Firestore
 
-Aplicativo web em formato de jogo quiz, responsivo para celular, com banco de perguntas em JSON, pontuação final, ranking e recurso de revisão das questões.
+Aplicativo web educacional em formato de jogo quiz, responsivo para celular, com perguntas aleatórias, pontuação, ranking e recurso de revisão de questão.
 
-## Arquivos principais
+## Mudança da versão v3
 
-- `index.html`: estrutura das telas do jogo.
-- `styles.css`: visual do aplicativo.
-- `app.js`: lógica do jogo, sorteio das perguntas, pontuação, ranking e integração com Firebase.
-- `firebase-config.js`: local onde deve ser inserida a configuração do Firebase.
-- `db_perguntas.json`: banco de perguntas.
-- `firestore-rules.txt`: regras sugeridas para o Firestore.
+Nesta versão, o jogador continua respondendo enquanto acertar. O desafio encerra no primeiro erro. Após errar, o jogador pode:
 
-## Funcionamento da seleção das perguntas
+1. tentar novamente do zero; ou
+2. finalizar e gravar a pontuação no ranking.
 
-O jogo apresenta 10 questões por desafio. Internamente, o sistema seleciona:
+A progressão interna das perguntas continua usando o padrão oculto: 5 fáceis, 3 médias e 2 difíceis. Essa informação não aparece no front-end.
 
-- 5 questões fáceis;
-- 3 questões médias;
-- 2 questões difíceis.
+## Arquivos
 
-Essa lógica não é exibida ao jogador na tela. O objetivo é manter sensação de jogo contínuo, com evolução progressiva da dificuldade.
-
-O sistema tenta evitar repetir perguntas já utilizadas no mesmo navegador. Quando o banco de perguntas sem repetição acaba, o histórico local é reiniciado e as perguntas podem voltar a aparecer.
+- `index.html` — estrutura do jogo.
+- `styles.css` — visual responsivo estilo game.
+- `app.js` — lógica do quiz, ranking e Firebase.
+- `firebase-config.js` — configuração do Firebase.
+- `db_perguntas.json` — banco de perguntas.
+- `firestore-rules.txt` — regras do Firestore.
 
 ## Configuração do Firebase
 
-No arquivo `firebase-config.js`, mantenha a estrutura abaixo:
+No arquivo `firebase-config.js`, deixe assim:
 
 ```javascript
 window.QUIZ_FIREBASE_ENABLED = true;
 
 window.QUIZ_FIREBASE_CONFIG = {
-  apiKey: "SEU_API_KEY",
+  apiKey: "SUA_CHAVE",
   authDomain: "SEU_PROJETO.firebaseapp.com",
   projectId: "SEU_PROJETO",
   storageBucket: "SEU_PROJETO.firebasestorage.app",
-  messagingSenderId: "SEU_MESSAGING_SENDER_ID",
+  messagingSenderId: "SEU_NUMERO",
   appId: "SEU_APP_ID",
   measurementId: "SEU_MEASUREMENT_ID"
 };
 ```
 
-Não cole comandos `npm`, `import` ou tags `<script>` dentro do arquivo `firebase-config.js`.
+Não cole comandos `npm`, `import` ou tags `<script>` dentro do `firebase-config.js`.
 
-## Publicação no GitHub Pages
+## Firestore
 
-1. Envie todos os arquivos para a raiz do repositório.
-2. Vá em `Settings > Pages`.
-3. Selecione `Deploy from a branch`.
-4. Escolha `main / root`.
-5. Aguarde o link público ser gerado.
+No Firebase Console:
 
-## Coleções usadas no Firestore
+1. Entre em Firestore Database.
+2. Abra Rules/Regras.
+3. Cole o conteúdo de `firestore-rules.txt`.
+4. Publique as regras.
 
-- `resultados`: salva nome, grupo, pontuação, acertos e perguntas utilizadas.
-- `recursos_questoes`: salva recursos/revisões enviados pelos jogadores.
+A versão v3 usa regras públicas validadas. Isso permite salvar ranking e recursos sem depender obrigatoriamente do login anônimo. Se você ativar Authentication anônima, o app também reconhece, mas não é obrigatório com essas regras.
+
+## Coleções criadas automaticamente
+
+O app cria documentos nestas coleções:
+
+- `resultados`
+- `recursos_questoes`
+
+Você não precisa criar as coleções manualmente. Elas aparecem após o primeiro salvamento.
+
+## GitHub Pages
+
+Suba todos os arquivos na raiz do repositório e ative:
+
+Settings > Pages > Deploy from a branch > main / root
+
+## Teste do banco online
+
+Na tela inicial deve aparecer:
+
+- `Banco online: conectado...` quando o Firebase estiver funcionando; ou
+- uma mensagem avisando que o ranking está apenas local.
+
+Ao finalizar o quiz, a tela de resultado informa se foi salvo no banco online ou apenas no dispositivo.
