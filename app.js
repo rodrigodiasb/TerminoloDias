@@ -11,10 +11,14 @@ const CONFIG = {
   learningPattern: ['facil','facil','facil','facil','facil','medio','medio','medio','dificil','dificil'],
   points: { facil: 10, medio: 20, dificil: 35 },
   bonusPerStreak: 3,
+  modes: {
+    dificil: { label: 'difícil', file: 'db_perguntas.json', className: 'dificil' },
+    facil: { label: 'fácil', file: 'db_perguntas2.json', className: 'facil' }
+  },
   localKeys: {
-    used: 'quiz_used_question_ids_v3',
-    scores: 'quiz_local_scores_v3',
-    reports: 'quiz_local_reports_v3'
+    used: 'quiz_used_question_ids_v6',
+    scores: 'quiz_local_scores_v6',
+    reports: 'quiz_local_reports_v6'
   }
 };
 
@@ -36,10 +40,37 @@ const state = {
   startedAt: null,
   endedAt: null,
   questionsLoaded: false,
+  currentQuestionBank: '',
+  quizMode: 'dificil',
   lastAnswerCorrect: false,
   gameLockedByError: false,
   lastSaveMode: ''
 };
+
+function getSelectedQuizMode(){
+  const checked = document.querySelector('input[name="quizMode"]:checked');
+  const mode = checked?.value || 'dificil';
+  return CONFIG.modes[mode] ? mode : 'dificil';
+}
+
+function getModeConfig(mode = getSelectedQuizMode()){
+  return CONFIG.modes[mode] || CONFIG.modes.dificil;
+}
+
+function updateModeVisualState(){
+  const selected = getSelectedQuizMode();
+  document.querySelectorAll('.mode-option').forEach(label => {
+    const input = label.querySelector('input[name="quizMode"]');
+    label.classList.toggle('selected', input?.value === selected);
+  });
+}
+
+function modeBadgeHtml(item){
+  const raw = item?.quizMode || item?.mode || 'dificil';
+  const mode = CONFIG.modes[raw] ? raw : 'dificil';
+  const cfg = getModeConfig(mode);
+  return `<span class="mode-badge ${cfg.className}">(${cfg.label})</span>`;
+}
 
 function setStatus(message, type = ''){
   const el = $('statusMessage');
@@ -150,9 +181,20 @@ function pickNextQuestion(){
   return fallback;
 }
 
-async function loadQuestions(){
+async function loadQuestions(mode = getSelectedQuizMode(), force = false){
+  const cfg = getModeConfig(mode);
+
+  if(!force && state.questionsLoaded && state.currentQuestionBank === cfg.file){
+    return;
+  }
+
   try {
-    const response = await fetch('./db_perguntas.json', { cache: 'no-store' });
+    state.questionsLoaded = false;
+    state.allQuestions = [];
+    state.currentQuestionBank = cfg.file;
+    state.quizMode = mode;
+
+    const response = await fetch(`./${cfg.file}`, { cache: 'no-store' });
     if(!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const questions = data?.quiz_terminologias_medicas?.questoes || data?.questoes || [];
@@ -165,7 +207,7 @@ async function loadQuestions(){
   } catch (err) {
     console.error('Erro ao carregar perguntas:', err);
     state.questionsLoaded = false;
-    setStatus('Erro ao carregar o banco de perguntas. Confira o arquivo db_perguntas.json.', 'warn');
+    setStatus(`Erro ao carregar ${cfg.file}. Confira se o arquivo está na mesma pasta do index.html.`, 'warn');
   }
 }
 
@@ -212,17 +254,22 @@ async function initFirebase(){
 async function startGame(){
   const name = $('playerName').value.trim();
   const group = $('playerGroup').value.trim();
+  const selectedMode = getSelectedQuizMode();
+  const selectedModeConfig = getModeConfig(selectedMode);
+
   if(!name){ alert('Informe o nome do militar.'); return; }
 
-  if(!state.questionsLoaded){
+  if(!state.questionsLoaded || state.currentQuestionBank !== selectedModeConfig.file){
     setStatus('Aguarde: carregando o banco de perguntas...', 'warn');
-    await loadQuestions();
+    await loadQuestions(selectedMode, true);
     if(!state.questionsLoaded){
-      alert('Ainda não foi possível carregar as perguntas. Confira se o arquivo db_perguntas.json está na mesma pasta do index.html.');
+      alert(`Ainda não foi possível carregar as perguntas. Confira se o arquivo ${selectedModeConfig.file} está na mesma pasta do index.html.`);
       return;
     }
   }
 
+  state.quizMode = selectedMode;
+  state.currentQuestionBank = selectedModeConfig.file;
   state.playerName = name;
   state.playerGroup = group || 'Sem VTR';
   state.currentQuestion = null;
@@ -339,6 +386,9 @@ async function finishAndSave(){
   const saveResult = await saveScore({
     playerName: state.playerName,
     playerGroup: state.playerGroup,
+    quizMode: state.quizMode || 'dificil',
+    quizModeLabel: getModeConfig(state.quizMode).label,
+    questionBank: state.currentQuestionBank || getModeConfig(state.quizMode).file,
     score: Number(state.score || 0),
     correct: Number(state.correct || 0),
     total: Number(totalAnswered || 0),
@@ -439,6 +489,7 @@ function renderPodium(scores){
     card.innerHTML = `
       <div class="podium-rank">${medalForPosition(pos)}</div>
       <div class="podium-name">${escapeHtml(item.playerName || 'MILITAR')}</div>
+      <div class="podium-mode">${modeBadgeHtml(item)}</div>
       <div class="podium-vtr">${escapeHtml(item.playerGroup || 'Sem VTR')}</div>
       <div class="podium-score">${item.score || 0}</div>`;
     podium.appendChild(card);
@@ -468,7 +519,7 @@ function renderRanking(scores, source = ''){
       <div class="rank-pos">#${actualPosition}</div>
       <div>
         <div class="rank-name">${escapeHtml(item.playerName || 'MILITAR')}</div>
-        <div class="rank-meta">${escapeHtml(item.playerGroup || 'Sem VTR')} • ${item.correct || 0} acerto${Number(item.correct || 0) === 1 ? '' : 's'} até o 1º erro</div>
+        <div class="rank-meta">${escapeHtml(item.playerGroup || 'Sem VTR')} • ${item.correct || 0} acerto${Number(item.correct || 0) === 1 ? '' : 's'} <span class="rank-mode">${modeBadgeHtml(item)}</span></div>
       </div>
       <div class="rank-score">${item.score || 0}</div>`;
     list.appendChild(row);
@@ -533,10 +584,18 @@ function bindEvents(){
   $('btnReport')?.addEventListener('click', openReport);
   $('btnSendReport')?.addEventListener('click', sendReport);
 
+  document.querySelectorAll('input[name="quizMode"]').forEach(input => {
+    input.addEventListener('change', async () => {
+      updateModeVisualState();
+      await loadQuestions(getSelectedQuizMode(), true);
+    });
+  });
+  updateModeVisualState();
+
   $('playerName')?.addEventListener('keydown', (ev) => { if(ev.key === 'Enter') $('playerGroup')?.focus(); });
   $('playerGroup')?.addEventListener('keydown', (ev) => { if(ev.key === 'Enter') startGame(); });
 }
 
 bindEvents();
-loadQuestions();
+loadQuestions(getSelectedQuizMode(), true);
 initFirebase();

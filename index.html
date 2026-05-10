@@ -31,6 +31,25 @@
           <input id="playerName" maxlength="40" placeholder="Ex.: SD DIAS" autocomplete="name" />
           <label for="playerGroup">VTR</label>
           <input id="playerGroup" maxlength="40" placeholder="Ex.: UR-167" />
+
+          <div class="mode-selector" aria-label="Selecionar modo do quiz">
+            <label class="mode-option selected" for="modeDificil">
+              <input type="radio" name="quizMode" id="modeDificil" value="dificil" checked />
+              <span>
+                <strong>Modo difícil</strong>
+                <small>Banco completo de APH, trauma, emergência e raciocínio clínico.</small>
+              </span>
+            </label>
+
+            <label class="mode-option" for="modeFacil">
+              <input type="radio" name="quizMode" id="modeFacil" value="facil" />
+              <span>
+                <strong>Modo fácil</strong>
+                <small>Apenas terminologias.</small>
+              </span>
+            </label>
+          </div>
+
           <button id="btnStart" class="btn primary">Iniciar missão</button>
           <button id="btnShowRankStart" class="btn ghost">Ver ranking</button>
           <p id="statusMessage" class="status-message sr-only">Carregando banco de perguntas...</p>

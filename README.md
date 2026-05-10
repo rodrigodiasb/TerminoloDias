@@ -74,3 +74,21 @@ Na tela inicial deve aparecer:
 - uma mensagem avisando que o ranking está apenas local.
 
 Ao finalizar o quiz, a tela de resultado informa se foi salvo no banco online ou apenas no dispositivo.
+
+
+## Atualização v6 — Modos do quiz
+
+A tela inicial possui dois modos:
+- **Modo difícil**: carrega `db_perguntas.json`.
+- **Modo fácil (apenas terminologias)**: carrega `db_perguntas2.json`.
+
+O resultado salvo no Firestore inclui:
+- `quizMode`
+- `quizModeLabel`
+- `questionBank`
+
+No ranking, o modo aparece como:
+- `(difícil)` em vermelho
+- `(fácil)` em verde
+
+Se você já tiver um `firebase-config.js` configurado, mantenha o seu arquivo atual e substitua apenas `index.html`, `styles.css`, `app.js` e adicione `db_perguntas2.json`.
