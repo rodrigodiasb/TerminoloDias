@@ -294,7 +294,11 @@ function answerQuestion(answer){
   }
 
   $('hudScore').textContent = state.score;
-  $('feedbackCard').classList.toggle('wrong', !isCorrect);
+  const feedbackCard = $('feedbackCard');
+  feedbackCard.classList.remove('feedback-success', 'feedback-wrong');
+  void feedbackCard.offsetWidth;
+  feedbackCard.classList.toggle('wrong', !isCorrect);
+  feedbackCard.classList.add(isCorrect ? 'feedback-success' : 'feedback-wrong');
   $('feedbackIcon').textContent = isCorrect ? '✓' : '×';
   $('feedbackTitle').textContent = isCorrect ? 'Acerto confirmado!' : 'Primeiro erro!';
 
@@ -408,9 +412,43 @@ async function loadRanking(){
   showScreen('screenRank');
 }
 
+function medalForPosition(position){
+  if(position === 1) return '🥇';
+  if(position === 2) return '🥈';
+  if(position === 3) return '🥉';
+  return '🏅';
+}
+
+function renderPodium(scores){
+  const podium = $('rankPodium');
+  if(!podium) return;
+  podium.innerHTML = '';
+
+  const topThree = scores.slice(0,3);
+  if(!topThree.length){
+    podium.innerHTML = '<p class="rank-meta">Ainda não há pontuações suficientes para o pódio.</p>';
+    return;
+  }
+
+  const order = [1,0,2].filter(index => topThree[index]);
+  order.forEach(index => {
+    const item = topThree[index];
+    const pos = index + 1;
+    const card = document.createElement('div');
+    card.className = `podium-item ${pos === 1 ? 'first' : ''}`;
+    card.innerHTML = `
+      <div class="podium-rank">${medalForPosition(pos)}</div>
+      <div class="podium-name">${escapeHtml(item.playerName || 'MILITAR')}</div>
+      <div class="podium-vtr">${escapeHtml(item.playerGroup || 'Sem VTR')}</div>
+      <div class="podium-score">${item.score || 0}</div>`;
+    podium.appendChild(card);
+  });
+}
+
 function renderRanking(scores, source = ''){
   const list = $('rankList');
   list.innerHTML = '';
+  renderPodium(scores);
 
   if(!scores.length){
     const empty = document.createElement('p');
@@ -420,11 +458,14 @@ function renderRanking(scores, source = ''){
     return;
   }
 
-  scores.forEach((item, index) => {
+  const listScores = scores.slice(3).length ? scores.slice(3) : scores;
+
+  listScores.forEach((item, index) => {
+    const actualPosition = scores.slice(3).length ? index + 4 : index + 1;
     const row = document.createElement('div');
-    row.className = 'rank-item';
+    row.className = `rank-item ${actualPosition <= 3 ? 'top-rank' : ''}`;
     row.innerHTML = `
-      <div class="rank-pos">#${index + 1}</div>
+      <div class="rank-pos">#${actualPosition}</div>
       <div>
         <div class="rank-name">${escapeHtml(item.playerName || 'MILITAR')}</div>
         <div class="rank-meta">${escapeHtml(item.playerGroup || 'Sem VTR')} • ${item.correct || 0} acerto${Number(item.correct || 0) === 1 ? '' : 's'} até o 1º erro</div>

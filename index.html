@@ -3,20 +3,29 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <meta name="theme-color" content="#151515" />
+  <meta name="theme-color" content="#171010" />
   <title>Quiz Bombeiro Militar</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main class="app-shell">
     <section id="screenStart" class="screen active">
-      <div class="hero-card">
+      <div class="hero-card siren-panel">
+        <div class="siren-glow siren-left"></div>
+        <div class="siren-glow siren-right"></div>
         <div class="top-line">
           <div class="game-badge">BOMBEIRO MILITAR • APH • RESGATE</div>
-          <div class="signal-chip">MISSÃO QUIZ</div>
+          <div class="signal-chip">MODO MISSÃO</div>
+        </div>
+        <div class="crest-row">
+          <div class="crest-icon">🚒</div>
+          <div class="crest-copy">
+            <span class="crest-tag">TREINAMENTO OPERACIONAL</span>
+            <span class="crest-subtag">resposta rápida • raciocínio • precisão</span>
+          </div>
         </div>
         <h1>Quiz<br><span>Terminologias</span><em>Operacionais</em></h1>
-        <p class="subtitle">Treine raciocínio rápido, prontidão operacional e tomada de decisão em clima de jogo.</p>
+        <p class="subtitle">Treine raciocínio rápido, prontidão operacional e tomada de decisão em um desafio com atmosfera de game tático.</p>
         <div class="player-form">
           <label for="playerName">Nome do militar</label>
           <input id="playerName" maxlength="40" placeholder="Ex.: SD DIAS" autocomplete="name" />
@@ -31,7 +40,7 @@
     </section>
 
     <section id="screenGame" class="screen">
-      <header class="game-header">
+      <header class="game-header tactical-header">
         <div>
           <span class="small-label">Militar</span>
           <strong id="hudPlayer">---</strong>
@@ -42,7 +51,7 @@
         </div>
       </header>
 
-      <div class="progress-wrap">
+      <div class="progress-wrap tactical-panel">
         <div class="progress-info">
           <span id="hudQuestionCount">Missão 1</span>
           <span id="hudLevel">Sequência: 0 acertos</span>
@@ -50,8 +59,12 @@
         <div class="progress-bar"><div id="progressFill"></div></div>
       </div>
 
-      <article class="question-card">
-        <div class="category-chip" id="hudCategory">Categoria</div>
+      <article class="question-card tactical-card">
+        <div class="tactical-topbar">
+          <div class="category-chip" id="hudCategory">Categoria</div>
+          <div class="alert-chip">ALERTA OPERACIONAL</div>
+        </div>
+        <div class="tactical-stripe"></div>
         <h2 id="questionText">Carregando pergunta...</h2>
         <div id="answers" class="answers"></div>
       </article>
@@ -59,6 +72,7 @@
 
     <section id="screenFeedback" class="screen feedback-screen">
       <div id="feedbackCard" class="feedback-card">
+        <div class="feedback-flash"></div>
         <div id="feedbackIcon" class="feedback-icon">✓</div>
         <h2 id="feedbackTitle">Resposta correta!</h2>
         <p id="feedbackExplanation"></p>
@@ -70,7 +84,7 @@
 
     <section id="screenResult" class="screen">
       <div class="result-card">
-        <div class="trophy">🏅</div>
+        <div class="trophy elite-badge">🏅</div>
         <h2>Missão encerrada</h2>
         <p id="resultSummary">Resultado final</p>
         <p id="saveStatus" class="save-status"></p>
@@ -93,6 +107,7 @@
           </div>
           <button id="btnBackHome" class="icon-btn">×</button>
         </div>
+        <div class="rank-podium" id="rankPodium"></div>
         <div id="rankList" class="rank-list"></div>
       </div>
     </section>
