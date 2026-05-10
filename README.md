@@ -1,58 +1,57 @@
-# Quiz Terminologias Médicas — GitHub Pages + Firebase Firestore
+# Quiz Terminologias Médicas
 
-## Arquivos
+Aplicativo web em formato de jogo quiz, responsivo para celular, com banco de perguntas em JSON, pontuação final, ranking e recurso de revisão das questões.
 
-- `index.html`: tela principal do jogo.
-- `styles.css`: layout visual estilo jogo para celular.
-- `app.js`: lógica do quiz, pontuação, aleatoriedade, ranking e recursos.
-- `firebase-config.js`: local onde você cola a configuração do Firebase.
+## Arquivos principais
+
+- `index.html`: estrutura das telas do jogo.
+- `styles.css`: visual do aplicativo.
+- `app.js`: lógica do jogo, sorteio das perguntas, pontuação, ranking e integração com Firebase.
+- `firebase-config.js`: local onde deve ser inserida a configuração do Firebase.
 - `db_perguntas.json`: banco de perguntas.
 - `firestore-rules.txt`: regras sugeridas para o Firestore.
 
-## Como testar localmente
+## Funcionamento da seleção das perguntas
 
-Abra a pasta no VS Code e use a extensão Live Server. Evite abrir o `index.html` diretamente com duplo clique, porque o navegador pode bloquear o carregamento do JSON.
+O jogo apresenta 10 questões por desafio. Internamente, o sistema seleciona:
 
-## Como publicar no GitHub Pages
+- 5 questões fáceis;
+- 3 questões médias;
+- 2 questões difíceis.
 
-1. Crie um repositório no GitHub.
-2. Envie todos os arquivos desta pasta para a raiz do repositório.
-3. Vá em Settings > Pages.
-4. Em Build and deployment, selecione Deploy from a branch.
-5. Escolha a branch `main` e a pasta `/root`.
-6. Salve e aguarde o link do GitHub Pages.
+Essa lógica não é exibida ao jogador na tela. O objetivo é manter sensação de jogo contínuo, com evolução progressiva da dificuldade.
 
-## Como conectar ao Firebase
+O sistema tenta evitar repetir perguntas já utilizadas no mesmo navegador. Quando o banco de perguntas sem repetição acaba, o histórico local é reiniciado e as perguntas podem voltar a aparecer.
 
-1. Acesse Firebase Console.
-2. Crie um projeto.
-3. Adicione um app Web.
-4. Copie o objeto `firebaseConfig`.
-5. Cole no arquivo `firebase-config.js`.
-6. Troque `firebaseEnabled = false` para `firebaseEnabled = true`.
-7. Ative Firestore Database.
-8. Ative Authentication > Sign-in method > Anonymous.
-9. Cole as regras do arquivo `firestore-rules.txt` em Firestore Database > Rules.
-10. Publique as regras.
+## Configuração do Firebase
 
-## Coleções criadas automaticamente
+No arquivo `firebase-config.js`, mantenha a estrutura abaixo:
 
-- `resultados`: salva pontuação final, jogador, turma, acertos e perguntas usadas.
-- `recursos_questoes`: salva os recursos/reportes enviados pelos jogadores.
+```javascript
+window.QUIZ_FIREBASE_ENABLED = true;
 
-## Aleatoriedade
+window.QUIZ_FIREBASE_CONFIG = {
+  apiKey: "SEU_API_KEY",
+  authDomain: "SEU_PROJETO.firebaseapp.com",
+  projectId: "SEU_PROJETO",
+  storageBucket: "SEU_PROJETO.firebasestorage.app",
+  messagingSenderId: "SEU_MESSAGING_SENDER_ID",
+  appId: "SEU_APP_ID",
+  measurementId: "SEU_MEASUREMENT_ID"
+};
+```
 
-Cada partida monta 10 perguntas:
+Não cole comandos `npm`, `import` ou tags `<script>` dentro do arquivo `firebase-config.js`.
 
-- 5 fáceis
-- 3 médias
-- 2 difíceis
+## Publicação no GitHub Pages
 
-O jogo tenta não repetir perguntas já usadas no mesmo navegador. Quando o banco não tiver mais perguntas inéditas suficientes, ele libera repetição.
+1. Envie todos os arquivos para a raiz do repositório.
+2. Vá em `Settings > Pages`.
+3. Selecione `Deploy from a branch`.
+4. Escolha `main / root`.
+5. Aguarde o link público ser gerado.
 
-## Pontuação
+## Coleções usadas no Firestore
 
-- Fácil: 10 pontos
-- Média: 20 pontos
-- Difícil: 35 pontos
-- Bônus: sequência de acertos aumenta a pontuação.
+- `resultados`: salva nome, grupo, pontuação, acertos e perguntas utilizadas.
+- `recursos_questoes`: salva recursos/revisões enviados pelos jogadores.

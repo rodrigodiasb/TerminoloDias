@@ -1,39 +1,26 @@
-import { firebaseEnabled, firebaseConfig } from './firebase-config.js';
-
 let db = null;
-let auth = null;
 let firebaseReady = false;
+let fire = null;
 
-if (firebaseEnabled) {
-  try {
-    const appModule = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js');
-    const authModule = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js');
-    const fireModule = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js');
-    const app = appModule.initializeApp(firebaseConfig);
-    auth = authModule.getAuth(app);
-    await authModule.signInAnonymously(auth);
-    db = fireModule.getFirestore(app);
-    window.__fire = fireModule;
-    firebaseReady = true;
-  } catch (error) {
-    console.warn('Firebase não conectou. Usando modo local.', error);
-  }
-}
+const firebaseConfig = window.QUIZ_FIREBASE_CONFIG || {};
+const firebaseEnabled = Boolean(window.QUIZ_FIREBASE_ENABLED);
 
 const CONFIG = {
   totalQuestions: 10,
   levelPlan: { facil: 5, medio: 3, dificil: 2 },
+  learningPattern: ['facil','facil','facil','facil','facil','medio','medio','medio','dificil','dificil'],
   points: { facil: 10, medio: 20, dificil: 35 },
   bonusPerStreak: 3,
   localKeys: {
-    used: 'quiz_used_question_ids_v1',
-    scores: 'quiz_local_scores_v1',
-    reports: 'quiz_local_reports_v1'
+    used: 'quiz_used_question_ids_v2',
+    scores: 'quiz_local_scores_v2',
+    reports: 'quiz_local_reports_v2'
   }
 };
 
 const $ = (id) => document.getElementById(id);
 const screens = ['screenStart','screenGame','screenFeedback','screenResult','screenRank'];
+
 const state = {
   allQuestions: [],
   selectedQuestions: [],
@@ -44,21 +31,35 @@ const state = {
   playerName: '',
   playerGroup: '',
   startedAt: null,
+  questionsLoaded: false,
   lastAnswerCorrect: false
 };
+
+function setStatus(message, type = ''){
+  const el = $('statusMessage');
+  if (!el) return;
+  el.textContent = message || '';
+  el.classList.remove('ok','warn');
+  if(type) el.classList.add(type);
+}
 
 function showScreen(id){
   screens.forEach(s => $(s).classList.toggle('active', s === id));
 }
 
 function shuffle(array){
-  return [...array].sort(() => Math.random() - 0.5);
+  const copy = [...array];
+  for(let i = copy.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
 }
 
 function normalizeLevel(level){
-  const v = String(level || '').toLowerCase();
-  if (v.includes('facil') || v.includes('fácil')) return 'facil';
-  if (v.includes('dificil') || v.includes('difícil')) return 'dificil';
+  const v = String(level || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (v.includes('facil')) return 'facil';
+  if (v.includes('dificil')) return 'dificil';
   return 'medio';
 }
 
@@ -68,49 +69,112 @@ function getUsedIds(){
 }
 
 function saveUsedIds(ids){
-  localStorage.setItem(CONFIG.localKeys.used, JSON.stringify([...new Set(ids)]));
+  localStorage.setItem(CONFIG.localKeys.used, JSON.stringify([...new Set(ids.map(String))]));
 }
 
-function pickByLevel(level, amount, usedIds){
+function pickOneByLevel(level, alreadyPicked, usedIds){
   const candidates = state.allQuestions.filter(q => normalizeLevel(q.nivel) === level);
-  let fresh = shuffle(candidates.filter(q => !usedIds.includes(String(q.id))));
-  let picked = fresh.slice(0, amount);
-  if (picked.length < amount) {
-    const complement = shuffle(candidates.filter(q => !picked.some(p => p.id === q.id))).slice(0, amount - picked.length);
-    picked = [...picked, ...complement];
+  const already = new Set(alreadyPicked.map(q => String(q.id)));
+  const used = new Set(usedIds.map(String));
+
+  let pool = shuffle(candidates.filter(q => !used.has(String(q.id)) && !already.has(String(q.id))));
+
+  if (!pool.length) {
+    pool = shuffle(candidates.filter(q => !already.has(String(q.id))));
   }
-  return picked;
+
+  if (!pool.length) {
+    pool = shuffle(state.allQuestions.filter(q => !already.has(String(q.id))));
+  }
+
+  return pool[0] || null;
 }
 
 function buildQuestionSet(){
-  let usedIds = getUsedIds();
-  let selected = [];
-  selected.push(...pickByLevel('facil', CONFIG.levelPlan.facil, usedIds));
-  selected.push(...pickByLevel('medio', CONFIG.levelPlan.medio, usedIds));
-  selected.push(...pickByLevel('dificil', CONFIG.levelPlan.dificil, usedIds));
+  const usedIds = getUsedIds();
+  const selected = [];
 
-  // Organiza a curva de aprendizagem: começa mais fácil, intercala médias e fecha com desafio.
-  const easy = shuffle(selected.filter(q => normalizeLevel(q.nivel) === 'facil'));
-  const medium = shuffle(selected.filter(q => normalizeLevel(q.nivel) === 'medio'));
-  const hard = shuffle(selected.filter(q => normalizeLevel(q.nivel) === 'dificil'));
-  const ordered = [easy[0], easy[1], medium[0], easy[2], medium[1], easy[3], hard[0], easy[4], medium[2], hard[1]].filter(Boolean);
+  CONFIG.learningPattern.forEach(level => {
+    const item = pickOneByLevel(level, selected, usedIds);
+    if(item) selected.push(item);
+  });
 
-  const newUsed = [...usedIds, ...ordered.map(q => String(q.id))];
-  const freshLeft = state.allQuestions.some(q => !newUsed.includes(String(q.id)));
-  saveUsedIds(freshLeft ? newUsed : []);
-  return ordered;
+  if (selected.length < CONFIG.totalQuestions) {
+    const already = new Set(selected.map(q => String(q.id)));
+    const complement = shuffle(state.allQuestions.filter(q => !already.has(String(q.id))))
+      .slice(0, CONFIG.totalQuestions - selected.length);
+    selected.push(...complement);
+  }
+
+  const newUsed = [...usedIds, ...selected.map(q => String(q.id))];
+  const allIds = new Set(state.allQuestions.map(q => String(q.id)));
+  const stillHasFreshQuestions = [...allIds].some(id => !newUsed.includes(id));
+  saveUsedIds(stillHasFreshQuestions ? newUsed : []);
+
+  return selected.slice(0, CONFIG.totalQuestions);
 }
 
 async function loadQuestions(){
-  const response = await fetch('./db_perguntas.json');
-  const data = await response.json();
-  state.allQuestions = data.quiz_terminologias_medicas.questoes.map(q => ({...q, nivel: normalizeLevel(q.nivel)}));
+  try {
+    const response = await fetch('./db_perguntas.json', { cache: 'no-store' });
+    if(!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const questions = data?.quiz_terminologias_medicas?.questoes || data?.questoes || [];
+    if(!Array.isArray(questions) || !questions.length) {
+      throw new Error('Nenhuma questão encontrada no JSON.');
+    }
+    state.allQuestions = questions.map(q => ({...q, nivel: normalizeLevel(q.nivel)}));
+    state.questionsLoaded = true;
+    setStatus(`Banco carregado: ${state.allQuestions.length} questões disponíveis.`, 'ok');
+  } catch (err) {
+    console.error('Erro ao carregar perguntas:', err);
+    state.questionsLoaded = false;
+    setStatus('Erro ao carregar o banco de perguntas. Confira o arquivo db_perguntas.json.', 'warn');
+  }
 }
 
-function startGame(){
+async function initFirebase(){
+  if(!firebaseEnabled){
+    console.info('Firebase desativado. Usando modo local.');
+    return;
+  }
+
+  if(!firebaseConfig || !firebaseConfig.projectId || String(firebaseConfig.projectId).includes('COLE_AQUI')){
+    console.warn('Firebase ativado, mas firebaseConfig está incompleto. Usando modo local.');
+    return;
+  }
+
+  try {
+    const appModule = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js');
+    const authModule = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js');
+    const fireModule = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js');
+    const app = appModule.initializeApp(firebaseConfig);
+    const auth = authModule.getAuth(app);
+    await authModule.signInAnonymously(auth);
+    db = fireModule.getFirestore(app);
+    fire = fireModule;
+    firebaseReady = true;
+    console.info('Firebase conectado.');
+  } catch (error) {
+    console.warn('Firebase não conectou. O jogo continuará em modo local.', error);
+    firebaseReady = false;
+  }
+}
+
+async function startGame(){
   const name = $('playerName').value.trim();
   const group = $('playerGroup').value.trim();
   if(!name){ alert('Informe o nome do jogador.'); return; }
+
+  if(!state.questionsLoaded){
+    setStatus('Aguarde: carregando o banco de perguntas...', 'warn');
+    await loadQuestions();
+    if(!state.questionsLoaded){
+      alert('Ainda não foi possível carregar as perguntas. Confira se o arquivo db_perguntas.json está na mesma pasta do index.html.');
+      return;
+    }
+  }
+
   state.playerName = name;
   state.playerGroup = group || 'Sem grupo';
   state.currentIndex = 0;
@@ -119,6 +183,12 @@ function startGame(){
   state.streak = 0;
   state.startedAt = new Date();
   state.selectedQuestions = buildQuestionSet();
+
+  if(!state.selectedQuestions.length){
+    alert('Não há perguntas suficientes para iniciar o desafio.');
+    return;
+  }
+
   $('hudPlayer').textContent = state.playerName;
   showScreen('screenGame');
   renderQuestion();
@@ -126,16 +196,21 @@ function startGame(){
 
 function renderQuestion(){
   const q = state.selectedQuestions[state.currentIndex];
+  if(!q){
+    finishGame();
+    return;
+  }
+
   $('hudScore').textContent = state.score;
   $('hudQuestionCount').textContent = `Questão ${state.currentIndex + 1}/${state.selectedQuestions.length}`;
-  $('hudLevel').textContent = q.nivel === 'facil' ? 'Fácil' : q.nivel === 'medio' ? 'Média' : 'Difícil';
+  $('hudLevel').textContent = 'Desafio';
   $('hudCategory').textContent = String(q.categoria || 'Geral').replaceAll('_',' ');
   $('questionText').textContent = q.pergunta;
   $('progressFill').style.width = `${((state.currentIndex) / state.selectedQuestions.length) * 100}%`;
 
   const answers = $('answers');
   answers.innerHTML = '';
-  shuffle(q.alternativas).forEach(alt => {
+  shuffle(q.alternativas || []).forEach(alt => {
     const btn = document.createElement('button');
     btn.className = 'answer-btn';
     btn.textContent = alt;
@@ -148,6 +223,7 @@ function answerQuestion(answer){
   const q = state.selectedQuestions[state.currentIndex];
   const isCorrect = answer === q.correta;
   state.lastAnswerCorrect = isCorrect;
+
   if(isCorrect){
     state.correct += 1;
     state.streak += 1;
@@ -157,10 +233,11 @@ function answerQuestion(answer){
   } else {
     state.streak = 0;
   }
+
   $('feedbackCard').classList.toggle('wrong', !isCorrect);
   $('feedbackIcon').textContent = isCorrect ? '✓' : '×';
   $('feedbackTitle').textContent = isCorrect ? 'Resposta certa!' : 'Resposta errada';
-  $('feedbackExplanation').innerHTML = `${q.explicacao || ''}<br><br><strong>Resposta correta:</strong> ${q.correta}`;
+  $('feedbackExplanation').innerHTML = `${escapeHtml(q.explicacao || '')}<br><br><strong>Resposta correta:</strong> ${escapeHtml(q.correta)}`;
   showScreen('screenFeedback');
 }
 
@@ -176,12 +253,14 @@ async function nextQuestion(){
 
 async function finishGame(){
   $('progressFill').style.width = '100%';
-  const total = state.selectedQuestions.length;
-  const percent = Math.round((state.correct / total) * 100);
+  const total = state.selectedQuestions.length || CONFIG.totalQuestions;
+  const percent = total ? Math.round((state.correct / total) * 100) : 0;
+
   $('resultSummary').textContent = `${state.playerName}, você concluiu o desafio com ${state.correct} acertos em ${total} questões.`;
   $('resultScore').textContent = state.score;
   $('resultCorrect').textContent = `${state.correct}/${total}`;
   $('resultPercent').textContent = `${percent}%`;
+
   await saveScore({
     playerName: state.playerName,
     playerGroup: state.playerGroup,
@@ -192,15 +271,21 @@ async function finishGame(){
     createdAt: new Date().toISOString(),
     questions: state.selectedQuestions.map(q => q.id)
   });
+
   showScreen('screenResult');
 }
 
 async function saveScore(payload){
   if(firebaseReady){
-    const { addDoc, collection, serverTimestamp } = window.__fire;
-    await addDoc(collection(db, 'resultados'), {...payload, createdAtServer: serverTimestamp()});
-    return;
+    try {
+      const { addDoc, collection, serverTimestamp } = fire;
+      await addDoc(collection(db, 'resultados'), {...payload, createdAtServer: serverTimestamp()});
+      return;
+    } catch (err) {
+      console.warn('Falha ao salvar no Firestore. Salvando localmente.', err);
+    }
   }
+
   const scores = JSON.parse(localStorage.getItem(CONFIG.localKeys.scores) || '[]');
   scores.push(payload);
   localStorage.setItem(CONFIG.localKeys.scores, JSON.stringify(scores));
@@ -208,16 +293,24 @@ async function saveScore(payload){
 
 async function loadRanking(){
   let scores = [];
+
   if(firebaseReady){
-    const { collection, getDocs, limit, orderBy, query } = window.__fire;
-    const q = query(collection(db, 'resultados'), orderBy('score', 'desc'), limit(20));
-    const snap = await getDocs(q);
-    scores = snap.docs.map(doc => doc.data());
-  } else {
+    try {
+      const { collection, getDocs, limit, orderBy, query } = fire;
+      const q = query(collection(db, 'resultados'), orderBy('score', 'desc'), limit(20));
+      const snap = await getDocs(q);
+      scores = snap.docs.map(doc => doc.data());
+    } catch (err) {
+      console.warn('Falha ao carregar ranking do Firestore. Usando ranking local.', err);
+    }
+  }
+
+  if(!scores.length){
     scores = JSON.parse(localStorage.getItem(CONFIG.localKeys.scores) || '[]')
-      .sort((a,b) => b.score - a.score)
+      .sort((a,b) => (b.score || 0) - (a.score || 0))
       .slice(0,20);
   }
+
   renderRanking(scores);
   showScreen('screenRank');
 }
@@ -225,16 +318,21 @@ async function loadRanking(){
 function renderRanking(scores){
   const list = $('rankList');
   list.innerHTML = '';
+
   if(!scores.length){
     list.innerHTML = '<p class="rank-meta">Ainda não há pontuações registradas.</p>';
     return;
   }
+
   scores.forEach((item, index) => {
     const row = document.createElement('div');
     row.className = 'rank-item';
     row.innerHTML = `
       <div class="rank-pos">#${index + 1}</div>
-      <div><div class="rank-name">${escapeHtml(item.playerName || 'Jogador')}</div><div class="rank-meta">${escapeHtml(item.playerGroup || 'Sem grupo')} • ${item.correct || 0}/${item.total || 10} acertos</div></div>
+      <div>
+        <div class="rank-name">${escapeHtml(item.playerName || 'Jogador')}</div>
+        <div class="rank-meta">${escapeHtml(item.playerGroup || 'Sem grupo')} • ${item.correct || 0}/${item.total || 10} acertos</div>
+      </div>
       <div class="rank-score">${item.score || 0}</div>`;
     list.appendChild(row);
   });
@@ -249,7 +347,10 @@ async function sendReport(event){
   event.preventDefault();
   const text = $('reportText').value.trim();
   if(!text){ alert('Descreva o motivo do recurso antes de enviar.'); return; }
+
   const q = state.selectedQuestions[state.currentIndex];
+  if(!q){ return; }
+
   const payload = {
     questionId: q.id,
     questionText: q.pergunta,
@@ -259,32 +360,44 @@ async function sendReport(event){
     reportText: text,
     createdAt: new Date().toISOString()
   };
+
   if(firebaseReady){
-    const { addDoc, collection, serverTimestamp } = window.__fire;
-    await addDoc(collection(db, 'recursos_questoes'), {...payload, createdAtServer: serverTimestamp()});
-  } else {
-    const reports = JSON.parse(localStorage.getItem(CONFIG.localKeys.reports) || '[]');
-    reports.push(payload);
-    localStorage.setItem(CONFIG.localKeys.reports, JSON.stringify(reports));
+    try {
+      const { addDoc, collection, serverTimestamp } = fire;
+      await addDoc(collection(db, 'recursos_questoes'), {...payload, createdAtServer: serverTimestamp()});
+      $('reportDialog').close();
+      alert('Recurso registrado. Obrigado por ajudar a melhorar o quiz!');
+      return;
+    } catch (err) {
+      console.warn('Falha ao salvar recurso no Firestore. Salvando localmente.', err);
+    }
   }
+
+  const reports = JSON.parse(localStorage.getItem(CONFIG.localKeys.reports) || '[]');
+  reports.push(payload);
+  localStorage.setItem(CONFIG.localKeys.reports, JSON.stringify(reports));
   $('reportDialog').close();
-  alert('Recurso registrado. Obrigado por ajudar a melhorar o quiz!');
+  alert('Recurso registrado localmente. Quando o Firebase estiver configurado, os próximos recursos irão para o banco online.');
 }
 
 function escapeHtml(str){
-  return String(str).replace(/[&<>'"]/g, t => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[t]));
+  return String(str ?? '').replace(/[&<>'"]/g, t => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[t]));
 }
 
-$('btnStart').addEventListener('click', startGame);
-$('btnNext').addEventListener('click', nextQuestion);
-$('btnRestart').addEventListener('click', () => showScreen('screenStart'));
-$('btnShowRank').addEventListener('click', loadRanking);
-$('btnShowRankStart').addEventListener('click', loadRanking);
-$('btnBackHome').addEventListener('click', () => showScreen('screenStart'));
-$('btnReport').addEventListener('click', openReport);
-$('btnSendReport').addEventListener('click', sendReport);
+function bindEvents(){
+  $('btnStart').addEventListener('click', startGame);
+  $('btnNext').addEventListener('click', nextQuestion);
+  $('btnRestart').addEventListener('click', () => showScreen('screenStart'));
+  $('btnShowRank').addEventListener('click', loadRanking);
+  $('btnShowRankStart').addEventListener('click', loadRanking);
+  $('btnBackHome').addEventListener('click', () => showScreen('screenStart'));
+  $('btnReport').addEventListener('click', openReport);
+  $('btnSendReport').addEventListener('click', sendReport);
 
-loadQuestions().catch(err => {
-  console.error(err);
-  alert('Não foi possível carregar o banco de perguntas. Confira se db_perguntas.json está na mesma pasta do index.html.');
-});
+  $('playerName').addEventListener('keydown', (ev) => { if(ev.key === 'Enter') $('playerGroup').focus(); });
+  $('playerGroup').addEventListener('keydown', (ev) => { if(ev.key === 'Enter') startGame(); });
+}
+
+bindEvents();
+loadQuestions();
+initFirebase();
