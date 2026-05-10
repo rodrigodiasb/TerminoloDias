@@ -212,7 +212,7 @@ async function initFirebase(){
 async function startGame(){
   const name = $('playerName').value.trim();
   const group = $('playerGroup').value.trim();
-  if(!name){ alert('Informe o nome do jogador.'); return; }
+  if(!name){ alert('Informe o nome do militar.'); return; }
 
   if(!state.questionsLoaded){
     setStatus('Aguarde: carregando o banco de perguntas...', 'warn');
@@ -224,7 +224,7 @@ async function startGame(){
   }
 
   state.playerName = name;
-  state.playerGroup = group || 'Sem grupo';
+  state.playerGroup = group || 'Sem VTR';
   state.currentQuestion = null;
   state.sessionQuestionIds = [];
   state.patternIndex = 0;
@@ -255,7 +255,7 @@ function renderNextQuestion(){
 
   state.currentQuestion = q;
   $('hudScore').textContent = state.score;
-  $('hudQuestionCount').textContent = `Questão ${state.answered + 1}`;
+  $('hudQuestionCount').textContent = `Missão ${state.answered + 1}`;
   $('hudLevel').textContent = `Sequência: ${state.correct} acerto${state.correct === 1 ? '' : 's'}`;
   $('hudCategory').textContent = String(q.categoria || 'Geral').replaceAll('_',' ');
   $('questionText').textContent = q.pergunta;
@@ -296,15 +296,15 @@ function answerQuestion(answer){
   $('hudScore').textContent = state.score;
   $('feedbackCard').classList.toggle('wrong', !isCorrect);
   $('feedbackIcon').textContent = isCorrect ? '✓' : '×';
-  $('feedbackTitle').textContent = isCorrect ? 'Resposta certa!' : 'Primeiro erro!';
+  $('feedbackTitle').textContent = isCorrect ? 'Acerto confirmado!' : 'Primeiro erro!';
 
   if(isCorrect){
-    $('feedbackExplanation').innerHTML = `${escapeHtml(q.explicacao || '')}<br><br><strong>Continue:</strong> o desafio segue enquanto você acertar.`;
+    $('feedbackExplanation').innerHTML = `${escapeHtml(q.explicacao || '')}<br><br><strong>Siga na missão:</strong> o desafio continua enquanto você mantiver a sequência de acertos.`;
     $('btnNext').classList.remove('hidden');
     $('btnRetryAfterError').classList.add('hidden');
     $('btnFinishSave').classList.add('hidden');
   } else {
-    $('feedbackExplanation').innerHTML = `${escapeHtml(q.explicacao || '')}<br><br><strong>Resposta correta:</strong> ${escapeHtml(q.correta)}<br><br>Você pode tentar novamente do zero ou finalizar agora para gravar sua pontuação no ranking.`;
+    $('feedbackExplanation').innerHTML = `${escapeHtml(q.explicacao || '')}<br><br><strong>Resposta correta:</strong> ${escapeHtml(q.correta)}<br><br>Agora você pode reiniciar a missão do zero ou finalizar para registrar sua pontuação no ranking.`;
     $('btnNext').classList.add('hidden');
     $('btnRetryAfterError').classList.remove('hidden');
     $('btnFinishSave').classList.remove('hidden');
@@ -324,7 +324,7 @@ async function finishAndSave(){
   const totalAnswered = state.answered || 0;
   const percent = totalAnswered ? Math.round((state.correct / totalAnswered) * 100) : 0;
 
-  $('resultSummary').textContent = `${state.playerName}, você acertou ${state.correct} pergunta${state.correct === 1 ? '' : 's'} antes do primeiro erro.`;
+  $('resultSummary').textContent = `${state.playerName}, você conquistou ${state.correct} acerto${state.correct === 1 ? '' : 's'} antes do primeiro erro.`;
   $('resultScore').textContent = state.score;
   $('resultCorrect').textContent = `${state.correct}/${totalAnswered}`;
   $('resultPercent').textContent = `${percent}%`;
@@ -348,9 +348,9 @@ async function finishAndSave(){
   });
 
   if(saveResult.mode === 'online'){
-    setSaveStatus('Resultado gravado no banco online. O ranking será compartilhado entre dispositivos.', 'ok');
+    setSaveStatus('Pontuação gravada com sucesso. O ranking ficará disponível para todos os dispositivos.', 'ok');
   } else {
-    setSaveStatus(`Resultado salvo apenas neste dispositivo. Motivo: ${saveResult.message || 'Firebase não conectado.'}`, 'warn');
+    setSaveStatus(`Pontuação salva apenas neste dispositivo. Motivo: ${saveResult.message || 'Firebase não conectado.'}`, 'warn');
   }
 }
 
@@ -412,15 +412,10 @@ function renderRanking(scores, source = ''){
   const list = $('rankList');
   list.innerHTML = '';
 
-  const sourceInfo = document.createElement('p');
-  sourceInfo.className = 'rank-meta';
-  sourceInfo.textContent = source === 'online' ? 'Fonte: banco online Firebase Firestore.' : `Fonte: ${source || 'ranking local deste dispositivo'}.`;
-  list.appendChild(sourceInfo);
-
   if(!scores.length){
     const empty = document.createElement('p');
     empty.className = 'rank-meta';
-    empty.textContent = 'Ainda não há pontuações registradas.';
+    empty.textContent = 'Ainda não há pontuações registradas no ranking.';
     list.appendChild(empty);
     return;
   }
@@ -431,8 +426,8 @@ function renderRanking(scores, source = ''){
     row.innerHTML = `
       <div class="rank-pos">#${index + 1}</div>
       <div>
-        <div class="rank-name">${escapeHtml(item.playerName || 'Jogador')}</div>
-        <div class="rank-meta">${escapeHtml(item.playerGroup || 'Sem grupo')} • ${item.correct || 0} acerto${Number(item.correct || 0) === 1 ? '' : 's'} até o 1º erro</div>
+        <div class="rank-name">${escapeHtml(item.playerName || 'MILITAR')}</div>
+        <div class="rank-meta">${escapeHtml(item.playerGroup || 'Sem VTR')} • ${item.correct || 0} acerto${Number(item.correct || 0) === 1 ? '' : 's'} até o 1º erro</div>
       </div>
       <div class="rank-score">${item.score || 0}</div>`;
     list.appendChild(row);
@@ -457,7 +452,7 @@ async function sendReport(event){
     questionText: q.pergunta,
     correctAnswer: q.correta,
     playerName: state.playerName || 'Não informado',
-    playerGroup: state.playerGroup || 'Sem grupo',
+    playerGroup: state.playerGroup || 'Sem VTR',
     reportText: text,
     createdAt: new Date().toISOString()
   };
@@ -486,19 +481,19 @@ function escapeHtml(str){
 }
 
 function bindEvents(){
-  $('btnStart').addEventListener('click', startGame);
-  $('btnNext').addEventListener('click', nextQuestion);
-  $('btnRetryAfterError').addEventListener('click', startGame);
-  $('btnFinishSave').addEventListener('click', finishAndSave);
-  $('btnRestart').addEventListener('click', startGame);
-  $('btnShowRank').addEventListener('click', loadRanking);
-  $('btnShowRankStart').addEventListener('click', loadRanking);
-  $('btnBackHome').addEventListener('click', () => showScreen('screenStart'));
-  $('btnReport').addEventListener('click', openReport);
-  $('btnSendReport').addEventListener('click', sendReport);
+  $('btnStart')?.addEventListener('click', startGame);
+  $('btnNext')?.addEventListener('click', nextQuestion);
+  $('btnRetryAfterError')?.addEventListener('click', startGame);
+  $('btnFinishSave')?.addEventListener('click', finishAndSave);
+  $('btnRestart')?.addEventListener('click', startGame);
+  $('btnShowRank')?.addEventListener('click', loadRanking);
+  $('btnShowRankStart')?.addEventListener('click', loadRanking);
+  $('btnBackHome')?.addEventListener('click', () => showScreen('screenStart'));
+  $('btnReport')?.addEventListener('click', openReport);
+  $('btnSendReport')?.addEventListener('click', sendReport);
 
-  $('playerName').addEventListener('keydown', (ev) => { if(ev.key === 'Enter') $('playerGroup').focus(); });
-  $('playerGroup').addEventListener('keydown', (ev) => { if(ev.key === 'Enter') startGame(); });
+  $('playerName')?.addEventListener('keydown', (ev) => { if(ev.key === 'Enter') $('playerGroup')?.focus(); });
+  $('playerGroup')?.addEventListener('keydown', (ev) => { if(ev.key === 'Enter') startGame(); });
 }
 
 bindEvents();

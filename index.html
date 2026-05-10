@@ -3,51 +3,49 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <meta name="theme-color" content="#121633" />
-  <title>Quiz Terminologias Médicas</title>
+  <meta name="theme-color" content="#151515" />
+  <title>Quiz Bombeiro Militar</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main class="app-shell">
     <section id="screenStart" class="screen active">
       <div class="hero-card">
-        <div class="game-badge">APH • Trauma • Emergência</div>
-        <h1>Quiz<br><span>Terminologias Médicas</span></h1>
-        <p class="subtitle">Aprenda por repetição, raciocínio clínico e ranking de desempenho.</p>
-        <div class="player-form">
-          <label for="playerName">Nome do jogador</label>
-          <input id="playerName" maxlength="40" placeholder="Ex.: Ana Clara" autocomplete="name" />
-          <label for="playerGroup">Turma / Grupo</label>
-          <input id="playerGroup" maxlength="40" placeholder="Ex.: Técnico Enfermagem G1" />
-          <button id="btnStart" class="btn primary">Começar desafio</button>
-          <button id="btnShowRankStart" class="btn ghost">Ver ranking</button>
-          <p id="statusMessage" class="status-message">Carregando banco de perguntas...</p>
-          <p id="dbStatus" class="db-status">Banco online: verificando conexão...</p>
+        <div class="top-line">
+          <div class="game-badge">BOMBEIRO MILITAR • APH • RESGATE</div>
+          <div class="signal-chip">MISSÃO QUIZ</div>
         </div>
-      </div>
-      <div class="mini-rules">
-        <div><strong>∞</strong><span>até o 1º erro</span></div>
-        <div><strong>Ranking</strong><span>pontuação final</span></div>
-        <div><strong>Recurso</strong><span>revisão da questão</span></div>
+        <h1>Quiz<br><span>Terminologias</span><em>Operacionais</em></h1>
+        <p class="subtitle">Treine raciocínio rápido, prontidão operacional e tomada de decisão em clima de jogo.</p>
+        <div class="player-form">
+          <label for="playerName">Nome do militar</label>
+          <input id="playerName" maxlength="40" placeholder="Ex.: SD DIAS" autocomplete="name" />
+          <label for="playerGroup">VTR</label>
+          <input id="playerGroup" maxlength="40" placeholder="Ex.: UR-167" />
+          <button id="btnStart" class="btn primary">Iniciar missão</button>
+          <button id="btnShowRankStart" class="btn ghost">Ver ranking</button>
+          <p id="statusMessage" class="status-message sr-only">Carregando banco de perguntas...</p>
+          <p id="dbStatus" class="db-status sr-only">Banco online: verificando conexão...</p>
+        </div>
       </div>
     </section>
 
     <section id="screenGame" class="screen">
       <header class="game-header">
         <div>
-          <span class="small-label">Jogador</span>
+          <span class="small-label">Militar</span>
           <strong id="hudPlayer">---</strong>
         </div>
         <div class="score-pill">
-          <span>Pontos</span>
+          <span>Pontuação</span>
           <strong id="hudScore">0</strong>
         </div>
       </header>
 
       <div class="progress-wrap">
         <div class="progress-info">
-          <span id="hudQuestionCount">Questão 1/10</span>
-          <span id="hudLevel">Desafio</span>
+          <span id="hudQuestionCount">Missão 1</span>
+          <span id="hudLevel">Sequência: 0 acertos</span>
         </div>
         <div class="progress-bar"><div id="progressFill"></div></div>
       </div>
@@ -64,17 +62,16 @@
         <div id="feedbackIcon" class="feedback-icon">✓</div>
         <h2 id="feedbackTitle">Resposta correta!</h2>
         <p id="feedbackExplanation"></p>
-        <button id="btnReport" class="btn ghost">Reportar / entrar com recurso</button>
-        <button id="btnNext" class="btn primary">Continuar desafio</button>
-        <button id="btnRetryAfterError" class="btn primary danger hidden">Tentar novamente do zero</button>
+        <button id="btnNext" class="btn primary">Continuar missão</button>
+        <button id="btnRetryAfterError" class="btn primary danger hidden">Reiniciar do zero</button>
         <button id="btnFinishSave" class="btn ghost strong hidden">Finalizar e gravar ranking</button>
       </div>
     </section>
 
     <section id="screenResult" class="screen">
       <div class="result-card">
-        <div class="trophy">🏆</div>
-        <h2>Desafio concluído</h2>
+        <div class="trophy">🏅</div>
+        <h2>Missão encerrada</h2>
         <p id="resultSummary">Resultado final</p>
         <p id="saveStatus" class="save-status"></p>
         <div class="result-grid">
@@ -82,7 +79,7 @@
           <div><strong id="resultCorrect">0</strong><span>Acertos</span></div>
           <div><strong id="resultPercent">0%</strong><span>Aproveitamento</span></div>
         </div>
-        <button id="btnRestart" class="btn primary">Jogar novamente</button>
+        <button id="btnRestart" class="btn primary">Nova missão</button>
         <button id="btnShowRank" class="btn ghost">Ver ranking</button>
       </div>
     </section>
